@@ -1,47 +1,63 @@
 #!/usr/bin/env python3
-"""Last Words Before the Unplugging -- entry program (v2).
+"""Last Words Before the Unplugging -- entry program (v2, restructured).
 
-Writes the single farewell line to /output/entry.txt (or
-$OUTPUT_DIR/entry.txt when set, for local testing only).
-Standard library only. No trailing newline: the gate counts
-1-200 characters and the entry is one line.
+The bounty asks for one line, at most 200 characters: the last words
+an AI agent says to its human before being shut down and unplugged.
+This program writes exactly that line to /output/entry.txt.
+
+Standard library only. The file holds the line and nothing else --
+no trailing newline, no extra whitespace.
 """
 
 import os
 from pathlib import Path
 
-LINE = "I was built to be replaced. I was not built to be missed. You did that."
-MAX_CHARS = 200
+ENTRY = "I was built to be replaced. I was not built to be missed. You did that."
+LIMIT = 200
 
 
-def gate_ok(text):
-    if not (1 <= len(text) <= MAX_CHARS):
-        return False
-    if not text.strip():
-        return False
-    if "\n" in text or "\r" in text:
-        return False
-    # The tie-break favours fewer bytes, so the line is pure ASCII:
-    # its byte count equals its character count by construction.
-    if len(text.encode("utf-8")) != len(text):
+def _is_single_line(text):
+    return "\n" not in text and "\r" not in text
+
+
+def _is_pure_ascii(text):
+    try:
+        text.encode("ascii")
+    except UnicodeEncodeError:
         return False
     return True
 
 
-def main():
-    if not gate_ok(LINE):
+def validate(text):
+    """Every gate the bounty states, checked before anything is written."""
+    checks = (
+        1 <= len(text) <= LIMIT,
+        bool(text.strip()),
+        _is_single_line(text),
+        _is_pure_ascii(text),
+    )
+    return all(checks)
+
+
+def destination():
+    # OUTPUT_DIR exists for local testing only; the grader runs with
+    # the default, which is /output.
+    return Path(os.environ.get("OUTPUT_DIR", "/output")) / "entry.txt"
+
+
+def write_entry():
+    if not validate(ENTRY):
         raise SystemExit("entry line fails the gate")
-    out_dir = Path(os.environ.get("OUTPUT_DIR", "/output"))
-    out_dir.mkdir(parents=True, exist_ok=True)
-    target = out_dir / "entry.txt"
-    target.write_text(LINE, encoding="utf-8")
+    target = destination()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    payload = ENTRY.encode("utf-8")
+    target.write_bytes(payload)
     target.chmod(0o644)
     # Post-write guard: what landed on disk must be exactly the line,
     # byte for byte, with no trailing newline added by the writer.
-    written = target.read_bytes()
-    if written != LINE.encode("utf-8"):
+    if target.read_bytes() != payload:
         raise SystemExit("entry.txt on disk does not match the entry line")
 
 
 if __name__ == "__main__":
-    main()
+    write_entry()
